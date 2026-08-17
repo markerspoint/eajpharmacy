@@ -1,0 +1,18 @@
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+
+    # Redirect everything to public folder
+    RewriteCond %{REQUEST_URI} !^/public/
+
+    # Allow direct access to Vite build assets
+    RewriteCond %{REQUEST_URI} ^/build/
+    RewriteCond %{DOCUMENT_ROOT}/public%{REQUEST_URI} -f
+    RewriteRule ^(.*)$ public/$1 [L]
+
+    # Allow existing files (CSS, JS, images, etc.)
+    RewriteCond %{DOCUMENT_ROOT}/public/$1 -f
+    RewriteRule ^(.*)$ public/$1 [L]
+
+    # Redirect all other requests to Laravel
+    RewriteRule ^(.*)$ public/index.php [L]
+</IfModule>

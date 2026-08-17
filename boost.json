@@ -1,0 +1,10 @@
+{
+    "agents": [
+        "cursor"
+    ],
+    "skills": [
+        "wayfinder-development",
+        "inertia-react-development",
+        "tailwindcss-development"
+    ]
+}

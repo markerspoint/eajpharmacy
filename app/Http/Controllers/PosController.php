@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers;
 
+use App\Events\OrderQueued;
+use App\Events\OrderProcessed;
 use App\Models\CashSession;
 use App\Models\Category;
 use App\Models\DiningTable;
@@ -351,7 +353,14 @@ class PosController extends Controller
                 return $order->load(['items.product', 'items.variant', 'listedBy']);
             });
 
-            return back()->with('queued_order', $this->mapQueuedOrder($order));
+            $mappedOrder = $this->mapQueuedOrder($order);
+            try {
+                OrderQueued::dispatch($mappedOrder, (int) $branchId);
+            } catch (\Throwable) {
+                // Broadcast error should not prevent order queuing
+            }
+
+            return back()->with('queued_order', $mappedOrder);
         } catch (\Throwable $e) {
             return back()->withErrors(['error' => $e->getMessage() ?: 'Unable to queue order.']);
         }
@@ -407,6 +416,12 @@ class PosController extends Controller
             'processed_by' => $user->id,
             'processed_at' => now(),
         ]);
+
+        try {
+            OrderProcessed::dispatch((int) $order->id, (int) $user->branch_id, 'cancelled', (int) $user->id);
+        } catch (\Throwable) {
+            // Broadcast error should not prevent order cancellation
+        }
 
         return back()->with('success', 'Pending order removed.');
     }
@@ -649,6 +664,14 @@ class PosController extends Controller
                     'hide_product_names' => (bool) SystemSetting::get('receipt.hide_product_names', $branchId, false),
                 ];
             });
+
+            if (! empty($result['queued_order_id'])) {
+                try {
+                    OrderProcessed::dispatch((int) $result['queued_order_id'], (int) $branchId, 'paid', (int) $user->id);
+                } catch (\Throwable) {
+                    // Broadcast error should not prevent checkout completion
+                }
+            }
 
             return back()->with('pos_result', $result);
 

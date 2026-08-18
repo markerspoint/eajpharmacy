@@ -11,14 +11,52 @@ import {
     CreditCard, Banknote, Smartphone, CheckCircle2,
     AlertTriangle, Package, History, ScanLine, Printer, QrCode,
     RefreshCw, Zap, User, ChevronDown, Wallet, CalendarClock, Unlock,
-    Check, Layers,
+    Check, Layers, Bell,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
     Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
+import { toast } from "sonner";
+import { echo } from "@/echo";
 import type { Product, CartItem, Category, TableOrder, DiningTable, ActivePromo, QueuedOrder } from "./posTypes";
+
+function playOrderChime() {
+    try {
+        const AudioCtxClass = window.AudioContext || (window as any).webkitAudioContext;
+        if (!AudioCtxClass) return;
+        const audioCtx = new AudioCtxClass();
+        if (audioCtx.state === "suspended") {
+            void audioCtx.resume();
+        }
+        const now = audioCtx.currentTime;
+
+        const osc1 = audioCtx.createOscillator();
+        const gain1 = audioCtx.createGain();
+        osc1.type = "sine";
+        osc1.frequency.setValueAtTime(587.33, now); // D5
+        gain1.gain.setValueAtTime(0.18, now);
+        gain1.gain.exponentialRampToValueAtTime(0.001, now + 0.28);
+        osc1.connect(gain1);
+        gain1.connect(audioCtx.destination);
+        osc1.start(now);
+        osc1.stop(now + 0.28);
+
+        const osc2 = audioCtx.createOscillator();
+        const gain2 = audioCtx.createGain();
+        osc2.type = "sine";
+        osc2.frequency.setValueAtTime(880, now + 0.1); // A5
+        gain2.gain.setValueAtTime(0.18, now + 0.1);
+        gain2.gain.exponentialRampToValueAtTime(0.001, now + 0.48);
+        osc2.connect(gain2);
+        gain2.connect(audioCtx.destination);
+        osc2.start(now + 0.1);
+        osc2.stop(now + 0.48);
+    } catch {
+        // Ignore audio playback errors if user hasn't interacted yet
+    }
+}
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface Session  { id: number; opening_cash: number; opened_at: string; status: string; }
@@ -1295,11 +1333,11 @@ export default function PosIndex() {
     const user        = props.auth?.user;
     const currency    = app?.currency ?? "₱";
     const layout      = (props.preferred_layout ?? "grid") as LayoutMode;
-    const pendingOrders = (props.pending_orders as QueuedOrder[]) ?? [];
     const isOrderTaker = (props.cashier_type ?? user?.cashier_type) === "order_taker";
     const canCollectPayments = props.can_collect_payments ?? user?.can_collect_payments ?? !isOrderTaker;
     const isOrderOnly = layout === "order_only" || !canCollectPayments;
 
+    const [pendingOrders,      setPendingOrders]      = useState<QueuedOrder[]>((props.pending_orders as QueuedOrder[]) ?? []);
     const [cart,               setCart]               = useState<CartItem[]>([]);
     const [search,             setSearch]             = useState("");
     const [activeCat,          setActiveCat]          = useState<number | null>(null);
@@ -1317,6 +1355,96 @@ export default function PosIndex() {
     const [pendingTableId,     setPendingTableId]     = useState<number | null>(null);
 
     const searchRef = useRef<HTMLInputElement>(null);
+    const seenOrderIds = useRef<Set<number>>(
+        new Set(((props.pending_orders as QueuedOrder[]) ?? []).map(o => o.id))
+    );
+
+    const notifyNewOrder = useCallback((order: QueuedOrder) => {
+        playOrderChime();
+        toast.info(`New order queued: ${order.ticket_number}`, {
+            icon: <Bell className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />,
+            description: `${order.customer_name || order.listed_by || "Walk-in customer"} • ${fmtMoney(order.total, currency)}`,
+            action: {
+                label: "View",
+                onClick: () => setShowPendingPayments(true),
+            },
+            duration: 6000,
+        });
+    }, [currency]);
+
+    // Keep pendingOrders in sync with page props and notify on new orders via polling
+    useEffect(() => {
+        const incoming = (props.pending_orders as QueuedOrder[]) ?? [];
+        setPendingOrders(incoming);
+
+        if (canCollectPayments) {
+            for (const order of incoming) {
+                if (!seenOrderIds.current.has(order.id)) {
+                    seenOrderIds.current.add(order.id);
+                    notifyNewOrder(order);
+                }
+            }
+        }
+    }, [props.pending_orders, canCollectPayments, notifyNewOrder]);
+
+    // ── Real-time Reverb WebSocket Listener ────────────────────────────────────
+    useEffect(() => {
+        if (!branch?.id || !canCollectPayments) return;
+
+        try {
+            const channel = echo.private(`branch.${branch.id}`);
+
+            channel.listen('.OrderQueued', (e: { order: QueuedOrder }) => {
+                if (!e?.order) return;
+                const incomingOrder = e.order;
+
+                setPendingOrders(prev => {
+                    const exists = prev.some(o => o.id === incomingOrder.id);
+                    if (exists) return prev;
+                    return [incomingOrder, ...prev];
+                });
+
+                if (!seenOrderIds.current.has(incomingOrder.id)) {
+                    seenOrderIds.current.add(incomingOrder.id);
+                    notifyNewOrder(incomingOrder);
+                }
+            });
+
+            channel.listen('.OrderProcessed', (e: { order_id: number; reason?: string; processed_by?: number }) => {
+                if (!e?.order_id) return;
+                setPendingOrders(prev => prev.filter(o => o.id !== e.order_id));
+                if (activeQueuedOrder?.id === e.order_id) {
+                    setActiveQueuedOrder(null);
+                    if (e.processed_by && user?.id && e.processed_by !== user.id) {
+                        toast.warning(`Order was ${e.reason === 'cancelled' ? 'cancelled' : 'paid'} on another terminal.`);
+                    }
+                }
+            });
+
+            return () => {
+                try {
+                    channel.stopListening('.OrderQueued');
+                    channel.stopListening('.OrderProcessed');
+                } catch {
+                    // Ignore cleanup errors
+                }
+            };
+        } catch {
+            // Fallback gracefully if Reverb connection is not available
+        }
+    }, [branch?.id, canCollectPayments, notifyNewOrder, activeQueuedOrder?.id, user?.id]);
+
+    // ── Background Polling Fallback (every 4s when visible) ────────────────────
+    useEffect(() => {
+        if (!branch?.id || !canCollectPayments) return;
+
+        const interval = setInterval(() => {
+            if (document.hidden) return;
+            router.reload({ only: ["pending_orders"] });
+        }, 4000);
+
+        return () => clearInterval(interval);
+    }, [branch?.id, canCollectPayments]);
 
     // Auto-focus on mount
     useEffect(() => { searchRef.current?.focus(); }, []);

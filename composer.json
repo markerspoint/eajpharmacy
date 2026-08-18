@@ -13,6 +13,7 @@
         "barryvdh/laravel-dompdf": "*",
         "inertiajs/inertia-laravel": "*",
         "laravel/framework": "^12.0",
+        "laravel/reverb": "^1.11",
         "laravel/tinker": "^2.10.1",
         "laravel/wayfinder": "^0.1.11",
         "tightenco/ziggy": "*"
@@ -53,7 +54,7 @@
         ],
         "dev": [
             "Composer\\Config::disableProcessTimeout",
-            "npx concurrently -c \"#93c5fd,#c4b5fd,#fdba74\" \"php artisan serve\" \"php artisan queue:listen --tries=1\" \"npm run dev\" --names='server,queue,vite'"
+            "npx concurrently -c \"#93c5fd,#c4b5fd,#34d399,#fdba74\" \"php artisan serve\" \"php artisan queue:listen --tries=1\" \"php artisan reverb:start\" \"npm run dev\" --names='server,queue,reverb,vite'"
         ],
         "dev:ssr": [
             "npm run build:ssr",

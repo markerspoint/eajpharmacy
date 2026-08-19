@@ -558,9 +558,9 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
                 </Sidebar>
 
                 {/* ── MAIN CONTENT ────────────────────────────────────── */}
-                <div className="flex flex-1 flex-col min-w-0">
+                <div className="flex flex-1 flex-col min-w-0 h-screen max-h-screen overflow-hidden">
                     {/* Top bar */}
-                    <header className="sticky top-0 z-40 h-16 bg-[#FFFFFF] dark:bg-[#1A202C] border-b border-[#E5E7EB] dark:border-[#2B364E] flex items-center justify-between px-6 shadow-xs">
+                    <header className="shrink-0 z-40 h-16 bg-[#FFFFFF] dark:bg-[#1A202C] border-b border-[#E5E7EB] dark:border-[#2B364E] flex items-center justify-between px-6 shadow-xs">
                         <div className="flex items-center gap-3">
                             <SidebarTrigger className="text-[#6B7280] hover:text-[#202638] dark:hover:text-[#FFFFFF]" />
                             <div className="flex items-center gap-2.5">
@@ -575,16 +575,18 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
                         </div>
 
                         <div className="flex items-center gap-3">
-                            {/* Fast POS Launch Shortcut */}
-                            <Link href="/pos">
-                                <Button
-                                    size="sm"
-                                    className="hidden sm:inline-flex items-center gap-2 h-9 px-3.5 rounded-xl font-bold text-xs bg-[#35425F] hover:bg-[#283248] text-white shadow-xs transition-all active:scale-95"
-                                >
-                                    <ShoppingCart className="h-3.5 w-3.5" />
-                                    <span>Open POS</span>
-                                </Button>
-                            </Link>
+                            {/* Fast POS Launch Shortcut (hidden if already on POS) */}
+                            {!isActive("/pos") && (
+                                <Link href="/pos">
+                                    <Button
+                                        size="sm"
+                                        className="hidden sm:inline-flex items-center gap-2 h-9 px-3.5 rounded-xl font-bold text-xs bg-[#35425F] hover:bg-[#283248] text-white shadow-xs transition-all active:scale-95"
+                                    >
+                                        <ShoppingCart className="h-3.5 w-3.5" />
+                                        <span>Open POS</span>
+                                    </Button>
+                                </Link>
+                            )}
 
                             <Button
                                 variant="ghost"
@@ -616,7 +618,10 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
                     </header>
 
                     {/* Page content */}
-                    <main className="flex-1 overflow-y-auto p-6 bg-[#FCFCFD] dark:bg-[#121620]">
+                    <main className={cn(
+                        "flex-1 min-h-0 bg-background",
+                        isActive("/pos") ? "p-0 overflow-hidden flex flex-col" : "overflow-y-auto p-6 bg-[#FCFCFD] dark:bg-[#121620]"
+                    )}>
                         {children}
                     </main>
                 </div>

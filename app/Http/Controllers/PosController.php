@@ -277,11 +277,16 @@ class PosController extends Controller
 
     // ─── Store (checkout) ─────────────────────────────────────────────────────
 
-    public function queueOrder(Request $request): RedirectResponse
+    public function queueOrder(Request $request): RedirectResponse|JsonResponse
     {
         $user = Auth::user();
         $branchId = $user->branch_id;
-        if (! $branchId) return back()->withErrors(['error' => 'No branch assigned.']);
+        if (! $branchId) {
+            if ($request->wantsJson()) {
+                return response()->json(['message' => 'No branch assigned.'], 422);
+            }
+            return back()->withErrors(['error' => 'No branch assigned.']);
+        }
 
         $validated = $request->validate([
             'items'              => ['required', 'array', 'min:1'],
@@ -360,8 +365,18 @@ class PosController extends Controller
                 // Broadcast error should not prevent order queuing
             }
 
+            if ($request->wantsJson()) {
+                return response()->json([
+                    'success' => true,
+                    'order'   => $mappedOrder,
+                ]);
+            }
+
             return back()->with('queued_order', $mappedOrder);
         } catch (\Throwable $e) {
+            if ($request->wantsJson()) {
+                return response()->json(['message' => $e->getMessage() ?: 'Unable to queue order.'], 422);
+            }
             return back()->withErrors(['error' => $e->getMessage() ?: 'Unable to queue order.']);
         }
     }

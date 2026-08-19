@@ -1548,7 +1548,9 @@ export default function PosIndex() {
     const [showPendingPayments,setShowPendingPayments]= useState(false);
     const [showOpenSession,    setShowOpenSession]    = useState(false);
     const [receipt,            setReceipt]            = useState<ReceiptData | null>(null);
-    const [queuedOrder,        setQueuedOrder]        = useState<QueuedOrder | null>(null);
+    const [queuedOrder,        setQueuedOrder]        = useState<QueuedOrder | null>(
+        () => (props.flash as any)?.queued_order ?? null
+    );
     const [activeQueuedOrder,  setActiveQueuedOrder]  = useState<QueuedOrder | null>(null);
     const [installmentPlanId,  setInstallmentPlanId]  = useState<number | null>(null);
     const [loading,            setLoading]            = useState(false);
@@ -1556,6 +1558,12 @@ export default function PosIndex() {
     const [variantFor,         setVariantFor]         = useState<Product | null>(null);
     const [activeTableOrderId, setActiveTableOrderId] = useState<number | null>(null);
     const [pendingTableId,     setPendingTableId]     = useState<number | null>(null);
+
+    useEffect(() => {
+        if ((props.flash as any)?.queued_order) {
+            setQueuedOrder((props.flash as any).queued_order as QueuedOrder);
+        }
+    }, [props.flash]);
 
     const searchRef = useRef<HTMLInputElement>(null);
     const seenOrderIds = useRef<Set<number>>(
@@ -1860,32 +1868,66 @@ export default function PosIndex() {
     const removeItem = (key: string) => setCart(prev => prev.filter(i => i.key !== key));
     const clearCart  = () => setCart([]);
 
-    const handleQueue = () => {
+    const handleQueue = async () => {
         if (!cart.length) return;
-        setLoading(true); setError(null);
-        router.post(routes.pos.queue(), {
-            items: cart.map(i => ({ id: i.product_id, qty: i.qty, variant_id: i.variant_id })),
-        }, {
-            preserveScroll: true,
-            onSuccess: page => {
-                const flash = (page.props as any).flash ?? {};
-                if (!flash.queued_order) {
-                    const pageErrors = (page.props as any).errors ?? {};
-                    const firstError = Object.values(pageErrors)[0] as string | undefined;
-                    setError(pageErrors.error ?? firstError ?? "Unable to print QR ticket.");
+        setLoading(true);
+        setError(null);
+
+        try {
+            const token = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') ?? '';
+            const res = await fetch(routes.pos.queue(), {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "Accept": "application/json",
+                    "X-CSRF-TOKEN": token,
+                    "X-Requested-With": "XMLHttpRequest",
+                },
+                body: JSON.stringify({
+                    items: cart.map(i => ({ id: i.product_id, qty: i.qty, variant_id: i.variant_id })),
+                }),
+            });
+
+            if (!res.ok) {
+                const data = await res.json().catch(() => ({}));
+                setError(data.message || data.error || (data.errors ? Object.values(data.errors)[0] as string : null) || "Unable to print QR ticket.");
+                setLoading(false);
+                return;
+            }
+
+            const data = await res.json();
+            if (!data.order) {
+                setError("Unable to generate QR ticket.");
+                setLoading(false);
+                return;
+            }
+
+            setQueuedOrder(data.order as QueuedOrder);
+            setActiveQueuedOrder(null);
+            setCart([]);
+            setLoading(false);
+        } catch {
+            router.post(routes.pos.queue(), {
+                items: cart.map(i => ({ id: i.product_id, qty: i.qty, variant_id: i.variant_id })),
+            }, {
+                preserveState: true,
+                preserveScroll: true,
+                only: ['flash', 'pending_orders'],
+                onSuccess: page => {
+                    const flash = (page.props as any).flash ?? {};
+                    if (flash.queued_order) {
+                        setQueuedOrder(flash.queued_order as QueuedOrder);
+                        setActiveQueuedOrder(null);
+                        setCart([]);
+                    }
                     setLoading(false);
-                    return;
-                }
-                setQueuedOrder(flash.queued_order as QueuedOrder);
-                setActiveQueuedOrder(null);
-                setCart([]);
-                setLoading(false);
-            },
-            onError: errors => {
-                setError(Object.values(errors)[0] as string ?? "Unable to print QR ticket.");
-                setLoading(false);
-            },
-        });
+                },
+                onError: errors => {
+                    setError(Object.values(errors)[0] as string ?? "Unable to print QR ticket.");
+                    setLoading(false);
+                },
+            });
+        }
     };
 
     const handleConfirm = (payData: {
@@ -2145,8 +2187,7 @@ export default function PosIndex() {
     if (layout === "mobile") {
         return (
             <AdminLayout>
-                <div className="relative flex flex-col overflow-hidden -m-6"
-                    style={{ height: 'calc(100dvh - 4rem)' }}>
+                <div className="relative flex flex-1 h-full w-full min-h-0 flex-col overflow-hidden bg-background">
                     {noSessionOverlay}
                     <div className="shrink-0 flex items-center gap-2 border-b border-border bg-card px-4 py-2">
                         {searchInput}
@@ -2212,12 +2253,7 @@ export default function PosIndex() {
     if (layout === "fast_cashier") {
         return (
             <AdminLayout>
-                <div className={cn(
-                    "relative flex flex-col overflow-hidden",
-                    user?.is_cashier
-                        ? "h-[calc(100dvh-7rem)]"
-                        : "h-[calc(100dvh-4rem)] -m-6"
-                )}>
+                <div className="relative flex flex-1 h-full w-full min-h-0 flex-col overflow-hidden bg-background">
                     {noSessionOverlay}
                     <div className="shrink-0 flex flex-wrap items-center gap-2 px-3 py-2 border-b border-border bg-card sm:px-4">
                         <div className={cn("flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold shrink-0",
@@ -2366,14 +2402,7 @@ export default function PosIndex() {
 
     return (
         <AdminLayout>
-            {/* CashierLayout (bottom-nav): header=3rem + nav=4rem = 7rem chrome, no padding */}
-            {/* AdminLayout: header=4rem, p-6 padding → -m-6 escape */}
-            <div className={cn(
-                "relative flex flex-col overflow-hidden",
-                user?.is_cashier
-                    ? "h-[calc(100vh-7rem)]"
-                    : "h-[calc(100vh-4rem)] -m-6"
-            )}>
+            <div className="relative flex flex-1 h-full w-full min-h-0 flex-col overflow-hidden bg-background">
                 {noSessionOverlay}
                 {/* Top bar with combined search/barcode */}
                 <div className="shrink-0 flex items-center gap-2 px-4 py-2 border-b border-border bg-card">

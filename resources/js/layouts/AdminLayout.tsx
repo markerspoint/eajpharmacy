@@ -255,7 +255,6 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
     const businessName = props.app?.business_name ?? props.app?.name ?? "Point of Sale";
     const logoKey = `${logoUrl ?? "emblem"}|${props.app?.logo_version ?? ""}`;
     const currentPath = usePage().url.split("?")[0].replace(/\/$/, "") || "/";
-    const [sidebarOpen, setSidebarOpen] = useState(true);
 
     // tablet / restaurant / grocery / cafe / salon → bottom static nav (no sidebar)
     // mobile → keep sidebar as normal
@@ -295,7 +294,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
     const managementActive = ["/users", "/suppliers", "/branches", "/dining-tables", "/settings"].some(isActive);
 
     return (
-        <SidebarProvider open={sidebarOpen} onOpenChange={setSidebarOpen}>
+        <SidebarProvider>
             <div className="flex min-h-screen w-full bg-background text-foreground">
 
                 {/* ── SIDEBAR ─────────────────────────────────────────── */}

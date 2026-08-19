@@ -563,3 +563,23 @@
 ::-webkit-scrollbar-corner {
     background: transparent;
 }
+
+/* ── Sonner Toast Customization (No borders, No close button) ────────────── */
+[data-sonner-toast] {
+    border: none !important;
+    border-width: 0 !important;
+}
+
+[data-sonner-toast][data-styled='true'] {
+    border: none !important;
+    border-width: 0 !important;
+}
+
+[data-rich-colors='true'][data-sonner-toast] {
+    border: none !important;
+    border-width: 0 !important;
+}
+
+[data-sonner-toast] [data-close-button] {
+    display: none !important;
+}

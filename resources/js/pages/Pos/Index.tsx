@@ -11,7 +11,7 @@ import {
     CreditCard, Banknote, Smartphone, CheckCircle2,
     AlertTriangle, Package, History, ScanLine, Printer, QrCode,
     RefreshCw, Zap, User, ChevronDown, Wallet, CalendarClock, Unlock,
-    Check, Layers, Bell,
+    Check, Layers, Bell, ArrowRight,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -899,9 +899,12 @@ function OpenSessionModal({ currency, onClose }: { currency: string; onClose: ()
     );
 }
 
-function CartPanel({ cart, subtotal, itemCount, currency, error, canCharge, orderOnly, onUpdateQty, onRemove, onClear, onCharge, onQueue }: {
+function CartPanel({ cart, subtotal, itemCount, currency, error, canCharge, orderOnly, activeQueuedOrder, onClearQueuedOrder, onUpdateQty, onRemove, onClear, onCharge, onQueue }: {
     cart: CartItem[]; subtotal: number; itemCount: number; currency: string;
-    error: string | null; canCharge: boolean; orderOnly?: boolean; onUpdateQty: (key: string, d: number) => void;
+    error: string | null; canCharge: boolean; orderOnly?: boolean;
+    activeQueuedOrder?: QueuedOrder | null;
+    onClearQueuedOrder?: () => void;
+    onUpdateQty: (key: string, d: number) => void;
     onRemove: (key: string) => void; onClear: () => void; onCharge: () => void; onQueue: () => void;
 }) {
     return (
@@ -920,6 +923,41 @@ function CartPanel({ cart, subtotal, itemCount, currency, error, canCharge, orde
                     </button>
                 )}
             </div>
+
+            {activeQueuedOrder && (
+                <div className="mx-3 mt-2.5 p-2.5 rounded-xl border border-primary/30 bg-primary/5 dark:bg-primary/10 flex items-center justify-between gap-2 animate-in fade-in slide-in-from-top-2 duration-300 shadow-sm shrink-0">
+                    <div className="flex items-center gap-2 min-w-0">
+                        <span className="relative flex h-2.5 w-2.5 shrink-0">
+                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                            <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+                        </span>
+                        <div className="min-w-0">
+                            <div className="flex items-center gap-1.5">
+                                <span className="text-xs font-black font-mono text-primary truncate">
+                                    {activeQueuedOrder.ticket_number}
+                                </span>
+                                <span className="text-[10px] bg-primary/15 text-primary font-bold px-1.5 py-0.5 rounded-md">
+                                    Pending
+                                </span>
+                            </div>
+                            <p className="text-[11px] text-muted-foreground truncate">
+                                {activeQueuedOrder.customer_name ? `${activeQueuedOrder.customer_name} • ` : ""}{activeQueuedOrder.listed_by ?? "Order taker"}
+                            </p>
+                        </div>
+                    </div>
+                    {onClearQueuedOrder && (
+                        <button
+                            type="button"
+                            onClick={onClearQueuedOrder}
+                            className="text-[11px] font-bold text-muted-foreground hover:text-destructive px-2 py-1 rounded-lg hover:bg-destructive/10 transition-colors shrink-0"
+                            title="Unlink pending ticket"
+                        >
+                            Unlink
+                        </button>
+                    )}
+                </div>
+            )}
+
             <div className="flex-1 overflow-y-auto">
                 {cart.length === 0 ? (
                     <div className="flex flex-col items-center justify-center h-full gap-3 text-muted-foreground px-4 text-center">
@@ -992,7 +1030,7 @@ function CartPanel({ cart, subtotal, itemCount, currency, error, canCharge, orde
     );
 }
 
-function FastCashierLayout({ cart, subtotal, itemCount, currency, settings, error, loading, canCollectPayments, sessionBlocked, onUpdateQty, onRemove, onClear, onCheckout, onQueue, onStartSession }: {
+function FastCashierLayout({ cart, subtotal, itemCount, currency, settings, error, loading, canCollectPayments, sessionBlocked, activeQueuedOrder, onClearQueuedOrder, onUpdateQty, onRemove, onClear, onCheckout, onQueue, onStartSession }: {
     cart: CartItem[];
     subtotal: number;
     itemCount: number;
@@ -1002,6 +1040,8 @@ function FastCashierLayout({ cart, subtotal, itemCount, currency, settings, erro
     loading: boolean;
     canCollectPayments: boolean;
     sessionBlocked: boolean;
+    activeQueuedOrder?: QueuedOrder | null;
+    onClearQueuedOrder?: () => void;
     onUpdateQty: (key: string, delta: number) => void;
     onRemove: (key: string) => void;
     onClear: () => void;
@@ -1012,7 +1052,14 @@ function FastCashierLayout({ cart, subtotal, itemCount, currency, settings, erro
     const [method, setMethod] = useState<PayMethod>((settings?.default_payment ?? "cash") as PayMethod);
     const [tender, setTender] = useState("");
     const [discount, setDiscount] = useState("");
-    const [customer, setCustomer] = useState("");
+    const [customer, setCustomer] = useState(activeQueuedOrder?.customer_name ?? "");
+
+    // Sync customer name when activeQueuedOrder changes
+    useEffect(() => {
+        if (activeQueuedOrder?.customer_name) {
+            setCustomer(activeQueuedOrder.customer_name);
+        }
+    }, [activeQueuedOrder]);
 
     const maxDiscount = settings?.max_discount_percent ?? 100;
     const discountPct = Math.min(Math.max(parseFloat(discount) || 0, 0), maxDiscount);
@@ -1064,6 +1111,40 @@ function FastCashierLayout({ cart, subtotal, itemCount, currency, settings, erro
                         )}
                     </div>
                 </div>
+
+                {activeQueuedOrder && (
+                    <div className="mx-3 mt-2.5 p-2.5 rounded-xl border border-primary/30 bg-primary/5 dark:bg-primary/10 flex items-center justify-between gap-2 animate-in fade-in slide-in-from-top-2 duration-300 shadow-sm shrink-0">
+                        <div className="flex items-center gap-2 min-w-0">
+                            <span className="relative flex h-2.5 w-2.5 shrink-0">
+                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+                            </span>
+                            <div className="min-w-0">
+                                <div className="flex items-center gap-1.5">
+                                    <span className="text-xs font-black font-mono text-primary truncate">
+                                        {activeQueuedOrder.ticket_number}
+                                    </span>
+                                    <span className="text-[10px] bg-primary/15 text-primary font-bold px-1.5 py-0.5 rounded-md">
+                                        Pending Ticket
+                                    </span>
+                                </div>
+                                <p className="text-[11px] text-muted-foreground truncate">
+                                    {activeQueuedOrder.customer_name ? `${activeQueuedOrder.customer_name} • ` : ""}{activeQueuedOrder.listed_by ?? "Order taker"}
+                                </p>
+                            </div>
+                        </div>
+                        {onClearQueuedOrder && (
+                            <button
+                                type="button"
+                                onClick={onClearQueuedOrder}
+                                className="text-[11px] font-bold text-muted-foreground hover:text-destructive px-2 py-1 rounded-lg hover:bg-destructive/10 transition-colors shrink-0"
+                                title="Unlink pending ticket"
+                            >
+                                Unlink
+                            </button>
+                        )}
+                    </div>
+                )}
 
                 <div className="flex-1 min-h-0 overflow-y-auto px-3 py-2">
                     {cart.length === 0 ? (
@@ -1215,6 +1296,8 @@ function PendingPaymentModal({ orders, currency, activeOrderId, onSelect, onDele
     onClose: () => void;
 }) {
     const [orderToRemove, setOrderToRemove] = useState<QueuedOrder | null>(null);
+    const [loadingId, setLoadingId] = useState<number | null>(null);
+    const [searchQuery, setSearchQuery] = useState("");
 
     const confirmRemove = () => {
         if (!orderToRemove) return;
@@ -1222,105 +1305,225 @@ function PendingPaymentModal({ orders, currency, activeOrderId, onSelect, onDele
         setOrderToRemove(null);
     };
 
+    const handleSelect = (order: QueuedOrder) => {
+        setLoadingId(order.id);
+        onSelect(order);
+    };
+
+    const filteredOrders = useMemo(() => {
+        if (!searchQuery.trim()) return orders;
+        const q = searchQuery.toLowerCase();
+        return orders.filter(o =>
+            (o.ticket_number || "").toLowerCase().includes(q) ||
+            (o.customer_name || "").toLowerCase().includes(q) ||
+            (o.listed_by || "").toLowerCase().includes(q) ||
+            o.items.some(it => (it.product_name || "").toLowerCase().includes(q))
+        );
+    }, [orders, searchQuery]);
+
     return (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center sm:p-4 bg-black/45 backdrop-blur-sm">
-        <div className="bg-card border border-border rounded-t-2xl sm:rounded-2xl w-full sm:max-w-lg shadow-2xl flex flex-col max-h-[86vh]">
-            <div className="shrink-0 flex items-center justify-between px-4 py-3 border-b border-border">
-                <div className="flex items-center gap-2 min-w-0">
-                    <QrCode className="h-4 w-4 text-primary shrink-0" />
-                    <span className="text-sm font-bold truncate">Pending Payment</span>
-                    <span className="bg-primary text-primary-foreground text-[10px] font-bold rounded-full h-4 min-w-[16px] flex items-center justify-center px-1">
-                        {orders.length}
-                    </span>
-                </div>
-                <button onClick={onClose} className="p-1 rounded-md hover:bg-muted text-muted-foreground">
-                    <X className="h-4 w-4" />
-                </button>
-            </div>
-            <div className="flex-1 min-h-0 overflow-y-auto">
-                {orders.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center h-48 px-4 text-center text-muted-foreground">
-                        <QrCode className="h-7 w-7 opacity-20 mb-2" />
-                        <p className="text-xs font-medium">No pending orders</p>
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+            <div className="bg-card border border-border/80 rounded-t-3xl sm:rounded-3xl w-full sm:max-w-lg shadow-2xl flex flex-col max-h-[88vh] overflow-hidden animate-in zoom-in-95 slide-in-from-bottom-8 sm:slide-in-from-bottom-4 duration-300 ease-out">
+                {/* Header */}
+                <div className="shrink-0 relative flex items-center justify-between px-5 py-4 border-b border-border bg-muted/30">
+                    <div className="flex items-center gap-3 min-w-0">
+                        <div className="relative flex h-10 w-10 items-center justify-center rounded-2xl bg-primary/10 text-primary ring-4 ring-primary/5 shrink-0">
+                            <QrCode className="h-5 w-5" />
+                            {orders.length > 0 && (
+                                <span className="absolute -top-1 -right-1 flex h-3 w-3">
+                                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
+                                    <span className="relative inline-flex rounded-full h-3 w-3 bg-primary"></span>
+                                </span>
+                            )}
+                        </div>
+                        <div className="min-w-0">
+                            <div className="flex items-center gap-2">
+                                <h3 className="text-sm font-black text-foreground tracking-tight">Pending Payment Queue</h3>
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-black bg-primary text-primary-foreground shadow-sm">
+                                    {orders.length}
+                                </span>
+                            </div>
+                            <p className="text-xs text-muted-foreground truncate mt-0.5">
+                                Select an unpaid order ticket to process at cashier counter
+                            </p>
+                        </div>
                     </div>
-                ) : (
-                    <div className="p-2 space-y-1.5">
-                        {orders.map(order => {
+                    <button
+                        onClick={onClose}
+                        className="h-8 w-8 rounded-xl flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/80 transition-all duration-150 active:scale-95 shrink-0"
+                    >
+                        <X className="h-4 w-4" />
+                    </button>
+                </div>
+
+                {/* Optional Search if more than 3 orders */}
+                {orders.length > 3 && (
+                    <div className="p-3 border-b border-border/60 bg-background/50">
+                        <div className="relative">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+                            <input
+                                value={searchQuery}
+                                onChange={e => setSearchQuery(e.target.value)}
+                                placeholder="Search ticket #, customer, order taker..."
+                                className="w-full h-8 pl-8 pr-3 text-xs bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-primary"
+                            />
+                        </div>
+                    </div>
+                )}
+
+                {/* Orders List */}
+                <div className="flex-1 min-h-0 overflow-y-auto p-3 sm:p-4 space-y-2.5">
+                    {orders.length === 0 ? (
+                        <div className="flex flex-col items-center justify-center h-52 px-4 text-center text-muted-foreground animate-in fade-in duration-300">
+                            <div className="h-14 w-14 rounded-full bg-muted/60 flex items-center justify-center mb-3 text-muted-foreground/40">
+                                <QrCode className="h-7 w-7" />
+                            </div>
+                            <p className="text-sm font-bold text-foreground">No Pending Orders</p>
+                            <p className="text-xs text-muted-foreground max-w-xs mt-1">
+                                Unpaid tickets sent by order takers will automatically show up here in real-time.
+                            </p>
+                        </div>
+                    ) : filteredOrders.length === 0 ? (
+                        <div className="py-8 text-center text-xs text-muted-foreground">
+                            No pending tickets matching "{searchQuery}"
+                        </div>
+                    ) : (
+                        filteredOrders.map((order, idx) => {
                             const active = activeOrderId === order.id;
+                            const isLoading = loadingId === order.id;
 
                             return (
                                 <div
                                     key={order.id}
+                                    style={{ animationDelay: `${idx * 40}ms` }}
                                     className={cn(
-                                        "relative w-full text-left rounded-lg border px-3 py-2.5 pr-9 transition-colors",
+                                        "group relative w-full rounded-2xl border transition-all duration-200 p-3.5 flex flex-col gap-2.5 animate-in fade-in-50 slide-in-from-bottom-2 duration-300",
                                         active
-                                            ? "border-primary bg-primary/8"
-                                            : "border-border bg-background hover:bg-muted/50 hover:border-primary/30",
+                                            ? "border-primary bg-primary/5 dark:bg-primary/10 shadow-md ring-1 ring-primary/30"
+                                            : "border-border bg-card hover:bg-muted/30 hover:border-primary/40 hover:shadow-sm",
                                     )}
                                 >
-                                    <button
-                                        type="button"
-                                        onClick={() => setOrderToRemove(order)}
-                                        className="absolute -right-1.5 -top-1.5 grid h-6 w-6 place-items-center rounded-full border border-border bg-card text-muted-foreground shadow-sm hover:border-destructive/40 hover:bg-destructive hover:text-destructive-foreground"
-                                        title="Remove pending order"
-                                    >
-                                        <X className="h-3.5 w-3.5" />
-                                    </button>
+                                    {/* Top Row: Ticket & Amount */}
                                     <div className="flex items-start justify-between gap-2">
-                                        <button type="button" onClick={() => onSelect(order)} className="min-w-0 flex-1 text-left">
-                                            <p className="text-xs font-black text-foreground font-mono truncate">{order.ticket_number}</p>
-                                            <p className="text-[11px] text-muted-foreground truncate mt-0.5">{order.listed_by ?? "Order taker"}</p>
-                                        </button>
-                                        <p className="shrink-0 text-xs font-black text-primary tabular-nums">{fmtMoney(order.total, currency)}</p>
+                                        <div className="min-w-0 flex-1">
+                                            <div className="flex items-center gap-1.5 flex-wrap">
+                                                <span className="font-mono text-xs font-black text-foreground bg-muted px-2 py-0.5 rounded-lg border border-border/60">
+                                                    {order.ticket_number}
+                                                </span>
+                                                {active && (
+                                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 text-[10px] font-bold">
+                                                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                                                        Currently In Cart
+                                                    </span>
+                                                )}
+                                            </div>
+                                            <div className="flex items-center gap-2 mt-1.5 text-xs text-muted-foreground truncate">
+                                                <span className="font-semibold text-foreground truncate">
+                                                    {order.customer_name || "Walk-in Customer"}
+                                                </span>
+                                                <span>•</span>
+                                                <span className="truncate text-muted-foreground/80">
+                                                    by {order.listed_by ?? "Order taker"}
+                                                </span>
+                                            </div>
+                                        </div>
+
+                                        <div className="text-right shrink-0">
+                                            <p className="text-base font-black text-primary tabular-nums">
+                                                {fmtMoney(order.total, currency)}
+                                            </p>
+                                            <span className="text-[10px] font-semibold text-muted-foreground">
+                                                {order.items.length} item{order.items.length !== 1 ? "s" : ""}
+                                            </span>
+                                        </div>
                                     </div>
-                                    <div className="mt-2 flex items-center justify-between gap-2">
-                                        <span className="text-[10px] text-muted-foreground">{order.items.length} line{order.items.length !== 1 ? "s" : ""}</span>
-                                        <button type="button" onClick={() => onSelect(order)} className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wide">
-                                            Select
+
+                                    {/* Items Preview Chips */}
+                                    <div className="flex items-center gap-1.5 overflow-hidden text-[11px] text-muted-foreground bg-muted/40 px-2.5 py-1.5 rounded-xl">
+                                        <span className="truncate flex-1 font-medium">
+                                            {order.items.map(i => `${i.quantity}x ${i.product_name}${i.variant_name ? ` (${i.variant_name})` : ""}`).join(", ")}
+                                        </span>
+                                    </div>
+
+                                    {/* Actions Bottom Bar */}
+                                    <div className="flex items-center justify-between gap-2 pt-1 border-t border-border/50">
+                                        <button
+                                            type="button"
+                                            onClick={() => setOrderToRemove(order)}
+                                            className="h-8 px-2 rounded-lg text-xs font-semibold text-muted-foreground/70 hover:text-destructive hover:bg-destructive/10 transition-colors flex items-center gap-1"
+                                            title="Delete ticket"
+                                        >
+                                            <Trash2 className="h-3.5 w-3.5" />
+                                            <span>Remove</span>
                                         </button>
+
+                                        <Button
+                                            size="sm"
+                                            onClick={() => handleSelect(order)}
+                                            disabled={isLoading}
+                                            className={cn(
+                                                "h-8 px-3.5 text-xs font-bold gap-1.5 rounded-xl transition-all shadow-sm active:scale-95",
+                                                active ? "bg-emerald-600 hover:bg-emerald-700 text-white" : ""
+                                            )}
+                                        >
+                                            {isLoading ? (
+                                                <span className="h-3.5 w-3.5 rounded-full border-2 border-primary-foreground/30 border-t-primary-foreground animate-spin" />
+                                            ) : active ? (
+                                                <>
+                                                    <Check className="h-3.5 w-3.5" />
+                                                    <span>Reload Cart</span>
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <span>Select & Charge</span>
+                                                    <ArrowRight className="h-3.5 w-3.5" />
+                                                </>
+                                            )}
+                                        </Button>
                                     </div>
                                 </div>
                             );
-                        })}
-                    </div>
-                )}
+                        })
+                    )}
+                </div>
             </div>
-        </div>
-        <Dialog open={!!orderToRemove} onOpenChange={(open) => !open && setOrderToRemove(null)}>
-            <DialogContent className="sm:max-w-md" showCloseButton={false}>
-                <DialogHeader>
-                    <div className="mb-1 flex h-10 w-10 items-center justify-center rounded-full bg-destructive/10 text-destructive">
-                        <AlertTriangle className="h-5 w-5" />
-                    </div>
-                    <DialogTitle>Remove Pending Order</DialogTitle>
-                    <DialogDescription>
-                        This will remove the unpaid ticket from the pending payment list.
-                    </DialogDescription>
-                </DialogHeader>
 
-                {orderToRemove && (
-                    <div className="rounded-lg border border-border bg-muted/30 p-3">
-                        <div className="flex items-center justify-between gap-3">
-                            <span className="font-mono text-sm font-black text-foreground">
-                                {orderToRemove.ticket_number}
-                            </span>
-                            <span className="text-sm font-black tabular-nums text-primary">
-                                {fmtMoney(orderToRemove.total, currency)}
-                            </span>
+            {/* Remove confirmation modal */}
+            <Dialog open={!!orderToRemove} onOpenChange={(open) => !open && setOrderToRemove(null)}>
+                <DialogContent className="sm:max-w-md" showCloseButton={false}>
+                    <DialogHeader>
+                        <div className="mb-1 flex h-10 w-10 items-center justify-center rounded-full bg-destructive/10 text-destructive">
+                            <AlertTriangle className="h-5 w-5" />
                         </div>
-                        <div className="mt-1 flex items-center justify-between gap-3 text-xs text-muted-foreground">
-                            <span className="truncate">{orderToRemove.customer_name || orderToRemove.listed_by || "Walk-in customer"}</span>
-                            <span>{orderToRemove.items.length} line{orderToRemove.items.length !== 1 ? "s" : ""}</span>
-                        </div>
-                    </div>
-                )}
+                        <DialogTitle>Remove Pending Order</DialogTitle>
+                        <DialogDescription>
+                            This will remove the unpaid ticket from the pending payment queue.
+                        </DialogDescription>
+                    </DialogHeader>
 
-                <DialogFooter>
-                    <Button variant="outline" onClick={() => setOrderToRemove(null)}>Cancel</Button>
-                    <Button variant="destructive" onClick={confirmRemove}>Remove Order</Button>
-                </DialogFooter>
-            </DialogContent>
-        </Dialog>
+                    {orderToRemove && (
+                        <div className="rounded-xl border border-border bg-muted/40 p-3.5 space-y-1">
+                            <div className="flex items-center justify-between gap-3">
+                                <span className="font-mono text-sm font-black text-foreground">
+                                    {orderToRemove.ticket_number}
+                                </span>
+                                <span className="text-sm font-black tabular-nums text-primary">
+                                    {fmtMoney(orderToRemove.total, currency)}
+                                </span>
+                            </div>
+                            <div className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
+                                <span className="truncate">{orderToRemove.customer_name || orderToRemove.listed_by || "Walk-in customer"}</span>
+                                <span>{orderToRemove.items.length} line{orderToRemove.items.length !== 1 ? "s" : ""}</span>
+                            </div>
+                        </div>
+                    )}
+
+                    <DialogFooter className="gap-2">
+                        <Button variant="outline" onClick={() => setOrderToRemove(null)}>Cancel</Button>
+                        <Button variant="destructive" onClick={confirmRemove}>Remove Order</Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </div>
     );
 }
@@ -1552,7 +1755,12 @@ export default function PosIndex() {
             const res = await fetch(`/pos/queued-orders/${encodeURIComponent(lookup)}`, {
                 headers: { "Accept": "application/json" },
             });
-            if (!res.ok) return false;
+            if (!res.ok) {
+                toast.error("Could not find pending order", {
+                    description: `Token: ${lookup}`,
+                });
+                return false;
+            }
             const data = await res.json();
             const order = data.order as QueuedOrder;
             setActiveQueuedOrder(order);
@@ -1573,11 +1781,16 @@ export default function PosIndex() {
             setSearch("");
             setShowPendingPayments(false);
             refocus(50);
+            playOrderChime();
+            toast.success(`Loaded Ticket #${order.ticket_number}`, {
+                description: `${order.customer_name ? `${order.customer_name} • ` : ""}${order.items.length} line item${order.items.length !== 1 ? "s" : ""} (${fmtMoney(order.total, currency)})`,
+            });
             return true;
         } catch {
+            toast.error("Failed to load pending order");
             return false;
         }
-    }, [normalizePendingPaymentScan, refocus]);
+    }, [normalizePendingPaymentScan, refocus, currency]);
 
     const selectPendingOrder = useCallback((order: QueuedOrder) => {
         void loadQueuedOrder(order.qr_token);
@@ -1743,6 +1956,10 @@ export default function PosIndex() {
                 setActiveQueuedOrder(null);
                 setCart([]);
                 setLoading(false);
+
+                toast.success("Checkout successful!", {
+                    description: `Receipt #${r.receipt_number ?? "—"} • Total: ${fmtMoney(r.total, currency)}`,
+                });
             },
             onError: errors => {
                 setError(Object.values(errors)[0] as string ?? "Transaction failed.");
@@ -1791,14 +2008,25 @@ export default function PosIndex() {
         <button
             type="button"
             onClick={() => setShowPendingPayments(true)}
-            className="relative flex items-center gap-1.5 h-8 px-2.5 rounded-lg border border-border text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors shrink-0"
+            className={cn(
+                "relative flex items-center gap-1.5 h-8 px-2.5 rounded-lg border text-xs font-bold transition-all duration-200 shrink-0 active:scale-95",
+                pendingOrders.length > 0
+                    ? "border-primary/50 bg-primary/10 text-primary hover:bg-primary/20 shadow-sm shadow-primary/10"
+                    : "border-border text-muted-foreground hover:text-foreground hover:bg-muted"
+            )}
             title="Pending payments"
         >
-            <QrCode className="h-3.5 w-3.5" />
+            <QrCode className={cn("h-3.5 w-3.5", pendingOrders.length > 0 && "text-primary animate-pulse")} />
             <span className="hidden sm:block">Pending</span>
             {pendingOrders.length > 0 && (
-                <span className="absolute -right-1.5 -top-1.5 h-4 min-w-4 rounded-full bg-primary px-1 text-[10px] font-black leading-4 text-primary-foreground">
-                    {pendingOrders.length}
+                <span className="relative flex items-center">
+                    <span className="h-4 min-w-4 rounded-full bg-primary px-1 text-[10px] font-black leading-4 text-primary-foreground flex items-center justify-center shadow-sm">
+                        {pendingOrders.length}
+                    </span>
+                    <span className="absolute -top-0.5 -right-0.5 flex h-2 w-2">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
+                        <span className="relative inline-flex rounded-full h-2 w-2 bg-primary"></span>
+                    </span>
                 </span>
             )}
         </button>
@@ -2091,6 +2319,11 @@ export default function PosIndex() {
                             loading={loading}
                             canCollectPayments={canCollectPayments}
                             sessionBlocked={sessionBlocked}
+                            activeQueuedOrder={activeQueuedOrder}
+                            onClearQueuedOrder={() => {
+                                setActiveQueuedOrder(null);
+                                setCart([]);
+                            }}
                             onUpdateQty={updateQty}
                             onRemove={removeItem}
                             onClear={clearCart}
@@ -2208,6 +2441,11 @@ export default function PosIndex() {
                         <CartPanel cart={cart} subtotal={subtotal} itemCount={itemCount} currency={currency} error={error}
                             canCharge={canCollectPayments}
                             orderOnly={isOrderOnly}
+                            activeQueuedOrder={activeQueuedOrder}
+                            onClearQueuedOrder={() => {
+                                setActiveQueuedOrder(null);
+                                setCart([]);
+                            }}
                             onUpdateQty={updateQty} onRemove={removeItem} onClear={clearCart}
                             onCharge={startCharge} onQueue={handleQueue} />
                     </div>

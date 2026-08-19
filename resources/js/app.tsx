@@ -31,11 +31,11 @@ function Providers({ children }: { children: React.ReactNode }) {
       <Toaster
         position="top-center"
         richColors
-        closeButton
+        closeButton={false}
         duration={4500}
         toastOptions={{
-          className: 'border shadow-lg',
-          style: { borderRadius: '8px' },
+          className: 'border-0 border-none shadow-lg',
+          style: { borderRadius: '8px', border: 'none' },
         }}
       />
     </ThemeProvider>

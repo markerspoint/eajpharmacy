@@ -1598,9 +1598,9 @@ export default function PosIndex() {
         }
     }, [props.pending_orders, canCollectPayments, notifyNewOrder]);
 
-    // ── Real-time Reverb WebSocket Listener ────────────────────────────────────
+    // ── Real-time Pusher WebSocket Listener (Cashier side only) ────────────────
     useEffect(() => {
-        if (!branch?.id || !canCollectPayments) return;
+        if (!branch?.id || !canCollectPayments || !echo) return;
 
         try {
             const channel = echo.private(`branch.${branch.id}`);
@@ -1636,12 +1636,13 @@ export default function PosIndex() {
                 try {
                     channel.stopListening('.OrderQueued');
                     channel.stopListening('.OrderProcessed');
+                    echo?.leave(`branch.${branch.id}`);
                 } catch {
                     // Ignore cleanup errors
                 }
             };
         } catch {
-            // Fallback gracefully if Reverb connection is not available
+            // Fallback gracefully if Pusher connection is not available
         }
     }, [branch?.id, canCollectPayments, notifyNewOrder, activeQueuedOrder?.id, user?.id]);
 

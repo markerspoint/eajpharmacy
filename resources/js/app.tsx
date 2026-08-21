@@ -11,7 +11,6 @@ import { ThemeProvider } from 'next-themes';
 
 // ── Sonner toast (global toaster) ──────────────────────────────────────────────
 import { Toaster } from "@/components/ui/sonner";
-import './echo';
 
 // ── Optional: StrictMode only in development ───────────────────────────────────
 const StrictModeWrapper = import.meta.env.DEV
